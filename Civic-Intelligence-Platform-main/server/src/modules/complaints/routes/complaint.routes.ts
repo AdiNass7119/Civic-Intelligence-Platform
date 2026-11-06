@@ -1,0 +1,53 @@
+import { Router } from 'express';
+import { ComplaintController } from '../controllers/complaint.controller';
+import { authenticate } from '../../auth/middleware/auth.middleware';
+import { requireRole as enforceRole } from '../../auth/middleware/rbac.middleware';
+import { Role } from '../../auth/constants/roles';
+import { upload } from '../../../middlewares/upload';
+
+const router = Router();
+
+// All complaint routes require authentication
+router.use(authenticate);
+
+// List/Search complaints (RBAC handled in service query builder)
+router.get('/', ComplaintController.getMyComplaints);
+router.get('/nearby', ComplaintController.getNearbyComplaints);
+router.get('/search-area', ComplaintController.getComplaintsInArea);
+
+// Specific ID
+router.get('/:id', ComplaintController.getById);
+
+// Citizen Actions
+router.post('/analyze-pre-submission', enforceRole([Role.CITIZEN, Role.ADMIN]), upload.array('images', 5), ComplaintController.analyzePreSubmission);
+router.post('/', enforceRole([Role.CITIZEN, Role.ADMIN]), ComplaintController.create);
+router.patch('/:id', enforceRole([Role.CITIZEN, Role.ADMIN]), ComplaintController.update);
+router.delete('/:id', enforceRole([Role.CITIZEN, Role.ADMIN]), ComplaintController.delete);
+
+// Officer Actions
+router.patch('/:id/assign', enforceRole([Role.OFFICER, Role.ADMIN]), ComplaintController.assign);
+router.patch('/:id/status', enforceRole([Role.OFFICER, Role.ADMIN]), ComplaintController.updateStatus);
+router.post('/:id/resolve', enforceRole([Role.OFFICER, Role.ADMIN]), upload.array('images', 5), ComplaintController.resolve);
+router.post('/:id/analyze', enforceRole([Role.OFFICER, Role.ADMIN]), ComplaintController.analyze);
+router.post('/:id/transfer-request', enforceRole([Role.OFFICER]), ComplaintController.requestTransfer);
+
+router.post('/:id/images', 
+  enforceRole([Role.CITIZEN, Role.ADMIN]), 
+  (req, res, next) => {
+    console.log('--- BEFORE MULTER ---');
+    console.log('Headers Content-Type:', req.headers['content-type']);
+    next();
+  },
+  upload.array('images', 5), 
+  (req, res, next) => {
+    console.log('--- AFTER MULTER ---');
+    console.log('req.body:', req.body);
+    console.log('req.files:', req.files);
+    console.log('Object.keys(req.body):', Object.keys(req.body || {}));
+    next();
+  },
+  ComplaintController.uploadImages
+);
+router.delete('/:id/images/:publicId(*)', enforceRole([Role.CITIZEN, Role.ADMIN]), ComplaintController.removeImage);
+
+export default router;
